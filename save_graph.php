@@ -23,7 +23,7 @@ $input = json_decode(file_get_contents("php://input"), true);
 /**
  * Validate required fields
  */
-$requiredFields = ['user_id', 'patient_id', 'pga', 'crp'];
+$requiredFields = ['patient_id', 'pga', 'crp'];
 
 foreach ($requiredFields as $field) {
     if (!isset($input[$field]) || $input[$field] === '') {
@@ -39,7 +39,6 @@ foreach ($requiredFields as $field) {
 /**
  * Sanitize & assign
  */
-$user_id    = (int) $input['user_id'];
 $patient_id = trim($input['patient_id']);
 $pga        = (float) $input['pga'];
 $crp        = (float) $input['crp'];
@@ -47,8 +46,8 @@ $crp        = (float) $input['crp'];
 /**
  * Insert using prepared statement
  */
-$sql = "INSERT INTO save_disease_scores_graph (user_id, patient_id, pga, crp)
-        VALUES (?, ?, ?, ?)";
+$sql = "INSERT INTO save_disease_scores_graph (patient_id, pga, crp)
+        VALUES (?, ?, ?)";
 
 $stmt = $conn->prepare($sql);
 
@@ -61,7 +60,7 @@ if (!$stmt) {
     exit;
 }
 
-$stmt->bind_param("isdd", $user_id, $patient_id, $pga, $crp);
+$stmt->bind_param("sdd", $patient_id, $pga, $crp);
 
 if ($stmt->execute()) {
     http_response_code(201); // Created
