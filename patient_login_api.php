@@ -2,9 +2,8 @@
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Origin: *");
 
-require_once "db_config.php";   // this defines $mysqli
+require_once "db_config.php";
 
-// Default response
 $response = [
     "success"    => false,
     "message"    => "",
@@ -14,7 +13,6 @@ $response = [
 ];
 
 try {
-    // 1. Read JSON body
     $input = file_get_contents("php://input");
     if (!$input) {
         throw new Exception("No JSON received");
@@ -25,7 +23,6 @@ try {
         throw new Exception("Invalid JSON format");
     }
 
-    // 2. Extract fields
     $patient_id = trim($data["patient_id"] ?? "");
     $password   = trim($data["password"] ?? "");
 
@@ -33,15 +30,17 @@ try {
         throw new Exception("Patient ID and Password are required");
     }
 
-    // 3. Query DB: get id, password, name, email
-    //    Table: patients
-    //    Columns: patient_id, password, name, email
+    if (!preg_match('/^pat_\d{4}$/i', $patient_id)) {
+        throw new Exception("Invalid Patient ID format");
+    }
+
     $stmt = $mysqli->prepare(
         "SELECT patient_id, password, name, email
          FROM patients
          WHERE patient_id = ?
          LIMIT 1"
     );
+
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $mysqli->error);
     }
@@ -55,16 +54,32 @@ try {
         throw new Exception("Patient not found");
     }
 
-    $stmt->bind_result($db_patient_id, $db_password, $db_name, $db_email);
+    $stmt->bind_result(
+        $db_patient_id,
+        $db_password,
+        $db_name,
+        $db_email
+    );
     $stmt->fetch();
     $stmt->close();
 
-    // 4. Check password (plain text – same as your signup)
-    if ($password !== $db_password) {
+    // ✅ PASSWORD CHECK: SUPPORTS BOTH PLAIN & HASHED
+    $loginOk = false;
+
+    // Case 1: plain password
+    if ($password === $db_password) {
+        $loginOk = true;
+    }
+
+    // Case 2: hashed password
+    if (!$loginOk && password_verify($password, $db_password)) {
+        $loginOk = true;
+    }
+
+    if (!$loginOk) {
         throw new Exception("Incorrect password");
     }
 
-    // 5. Success: fill response with id + name + email
     $response["success"]    = true;
     $response["message"]    = "Login successful";
     $response["patient_id"] = $db_patient_id;
@@ -76,6 +91,6 @@ try {
     $response["message"] = $e->getMessage();
 }
 
-// Send JSON
 echo json_encode($response);
 exit;
+?>

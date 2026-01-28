@@ -1,5 +1,6 @@
 <?php
 // referralhistory_get.php
+
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
@@ -7,7 +8,7 @@ header("Access-Control-Allow-Headers: Content-Type");
 
 require_once "db_config.php";
 
-// Read JSON body: { "patient_id": "P0001" }
+// Read JSON body
 $input = json_decode(file_get_contents("php://input"), true);
 
 if (!isset($input["patient_id"])) {
@@ -30,8 +31,9 @@ if ($patient_id === "") {
     exit;
 }
 
+// ✅ NO `id` HERE
 $stmt = $mysqli->prepare("
-    SELECT id, patient_id, message, created_at
+    SELECT patient_id, message, created_at
     FROM referrals
     WHERE patient_id = ?
     ORDER BY created_at DESC
@@ -50,7 +52,7 @@ $stmt->bind_param("s", $patient_id);
 $stmt->execute();
 
 $result = $stmt->get_result();
-$rows   = [];
+$rows = [];
 
 while ($row = $result->fetch_assoc()) {
     $rows[] = $row;
@@ -58,7 +60,7 @@ while ($row = $result->fetch_assoc()) {
 
 echo json_encode([
     "success" => true,
-    "data"    => $rows
+    "data" => $rows
 ]);
 
 $stmt->close();

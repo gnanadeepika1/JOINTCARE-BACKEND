@@ -11,7 +11,6 @@ $response = [
 ];
 
 try {
-    // 1. Read JSON body
     $input = file_get_contents("php://input");
     if (!$input) {
         throw new Exception("No JSON received");
@@ -22,7 +21,6 @@ try {
         throw new Exception("Invalid JSON format");
     }
 
-    // 2. Extract fields
     $patient_id = trim($data["patient_id"] ?? "");
     $name       = trim($data["name"] ?? "");
     $email      = trim($data["email"] ?? "");
@@ -33,56 +31,90 @@ try {
     $mobile     = trim($data["mobile"] ?? "");
     $password   = trim($data["password"] ?? "");
 
-    // 3. Validation
-    if ($patient_id === "" || $name === "" || $email === "" || $age_str === "" ||
+    // 🔹 Empty check
+    if (
+        $patient_id === "" || $name === "" || $email === "" || $age_str === "" ||
         $sex === "" || $occupation === "" || $address === "" ||
-        $mobile === "" || $password === "") {
+        $mobile === "" || $password === ""
+    ) {
         throw new Exception("All fields are required");
     }
 
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        throw new Exception("Invalid email format");
+    // 🔹 Patient ID (pat_1001)
+    if (!preg_match("/^pat_\\d{4}$/i", $patient_id)) {
+        throw new Exception("Patient ID must be like pat_1001");
     }
 
-    if (!ctype_digit($age_str) || intval($age_str) <= 0) {
+    // 🔹 Name (letters & spaces)
+    if (!preg_match("/^[A-Za-z ]+$/", $name)) {
+        throw new Exception("Name should contain only letters and spaces");
+    }
+
+    // 🔹 Email (gmail only)
+    if (!preg_match("/^[A-Za-z][A-Za-z0-9]*@gmail\\.com$/", $email)) {
+        throw new Exception("Email must be abc123@gmail.com");
+    }
+
+    // 🔹 Age (1–120)
+    if (!ctype_digit($age_str)) {
         throw new Exception("Invalid age");
     }
     $age = intval($age_str);
-
-    if (!preg_match('/^[0-9]{10,}$/', $mobile)) {
-        throw new Exception("Invalid mobile number");
+    if ($age < 1 || $age > 120) {
+        throw new Exception("Age must be between 1 and 120");
     }
 
-    if (strlen($password) < 6) {
-        throw new Exception("Password must be at least 6 characters");
+    // 🔹 Sex
+    if (!in_array(strtolower($sex), ["male", "female", "other"])) {
+        throw new Exception("Sex must be Male, Female or Other");
     }
 
-    // 4. Check if patient already exists
+    // 🔹 Occupation
+    if (!preg_match("/^[A-Za-z ]+$/", $occupation)) {
+        throw new Exception("Occupation should contain only letters");
+    }
+
+    // 🔹 Address length
+    if (strlen($address) < 5) {
+        throw new Exception("Address is too short");
+    }
+
+    // 🔹 Mobile (10 digits)
+    if (!preg_match("/^\\d{10}$/", $mobile)) {
+        throw new Exception("Mobile number must be exactly 10 digits");
+    }
+
+    // 🔹 Mobile (not all digits same)
+    if (preg_match("/(\\d)\\1{9}/", $mobile)) {
+        throw new Exception("Mobile number cannot have all digits same");
+    }
+
+    // 🔹 Strong password (same as Android)
+    if (!preg_match("/^(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{6,10}$/", $password)) {
+        throw new Exception(
+            "Password must be 6–10 chars with capital letter, digit and special character"
+        );
+    }
+
+    // 🔹 Duplicate check
     $check = $mysqli->prepare(
         "SELECT id FROM patients WHERE patient_id = ? OR email = ? OR mobile = ? LIMIT 1"
     );
-    if (!$check) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
-
     $check->bind_param("sss", $patient_id, $email, $mobile);
     $check->execute();
     $check->store_result();
 
     if ($check->num_rows > 0) {
-        $check->close();
         throw new Exception("Patient ID, Email or Mobile already registered");
     }
     $check->close();
 
-    // 5. Insert patient
+    // 🔹 Insert
     $stmt = $mysqli->prepare(
-        "INSERT INTO patients (patient_id, name, email, age, sex, occupation, address, mobile, password)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO patients 
+        (patient_id, name, email, age, sex, occupation, address, mobile, password)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
 
     $stmt->bind_param(
         "sssisssss",
@@ -94,16 +126,12 @@ try {
         $occupation,
         $address,
         $mobile,
-        $password      // in real apps use password_hash()
+        $password
     );
 
-    if (!$stmt->execute()) {
-        $stmt->close();
-        throw new Exception("Insert failed: " . $stmt->error);
-    }
+    $stmt->execute();
     $stmt->close();
 
-    // 6. Success
     $response["success"]    = true;
     $response["message"]    = "Patient registered successfully";
     $response["patient_id"] = $patient_id;

@@ -3,9 +3,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once 'db_connect.php';
 
-/**
- * Allow only POST
- */
+/* Allow only POST */
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode([
@@ -15,19 +13,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-/**
- * Get JSON input
- */
+/* Try JSON input first */
 $input = json_decode(file_get_contents("php://input"), true);
 
-/**
- * Validate required fields
- */
-$requiredFields = ['patient_id', 'pga', 'crp'];
+/* 🔥 FALLBACK TO FORM POST (CRITICAL FIX) */
+if (empty($input)) {
+    $input = $_POST;
+}
+
+/* Required fields */
+$requiredFields = ['patient_id', 'tjc', 'sjc', 'pga', 'ea', 'crp'];
 
 foreach ($requiredFields as $field) {
     if (!isset($input[$field]) || $input[$field] === '') {
-        http_response_code(400); // Bad Request
+        http_response_code(400);
         echo json_encode([
             "success" => false,
             "message" => "$field is required"
@@ -36,18 +35,18 @@ foreach ($requiredFields as $field) {
     }
 }
 
-/**
- * Sanitize & assign
- */
+/* Assign */
 $patient_id = trim($input['patient_id']);
-$pga        = (float) $input['pga'];
-$crp        = (float) $input['crp'];
+$tjc = (int)$input['tjc'];
+$sjc = (int)$input['sjc'];
+$pga = (float)$input['pga'];
+$ea  = (float)$input['ea'];
+$crp = (float)$input['crp'];
 
-/**
- * Insert using prepared statement
- */
-$sql = "INSERT INTO save_disease_scores_graph (patient_id, pga, crp)
-        VALUES (?, ?, ?)";
+/* Insert */
+$sql = "INSERT INTO save_disease_scores_graph
+        (patient_id, tjc, sjc, pga, ea, crp, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())";
 
 $stmt = $conn->prepare($sql);
 
@@ -60,20 +59,28 @@ if (!$stmt) {
     exit;
 }
 
-$stmt->bind_param("sdd", $patient_id, $pga, $crp);
+$stmt->bind_param(
+    "siiddd",
+    $patient_id,
+    $tjc,
+    $sjc,
+    $pga,
+    $ea,
+    $crp
+);
 
 if ($stmt->execute()) {
-    http_response_code(201); // Created
     echo json_encode([
         "success" => true,
-        "message" => "Data inserted successfully",
+        "message" => "Disease score saved successfully",
         "insert_id" => $stmt->insert_id
     ]);
 } else {
     http_response_code(500);
     echo json_encode([
         "success" => false,
-        "message" => "Insert failed"
+        "message" => "Insert failed",
+        "error" => $stmt->error
     ]);
 }
 
