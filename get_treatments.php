@@ -1,76 +1,24 @@
 <?php
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Origin: *");
-
+header("Content-Type: application/json");
 require_once "db_config.php";
 
-$response = [
-    "success"    => false,
-    "message"    => "",
-    "treatments" => []
-];
+$data = json_decode(file_get_contents("php://input"), true);
 
-try {
-    // 1. Read raw JSON body
-    $raw = file_get_contents("php://input");
-    if (!$raw) {
-        throw new Exception("No JSON body received");
-    }
+$stmt = $mysqli->prepare("
+SELECT name, dose, route, frequency_number, frequency_text, duration
+FROM treatments
+WHERE patient_id = ?
+ORDER BY created_at DESC
+");
 
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        throw new Exception("Invalid JSON format");
-    }
+$stmt->bind_param("s", $data["patient_id"]);
+$stmt->execute();
 
-    $patient_id = trim($data["patient_id"] ?? "");
-    if ($patient_id === "") {
-        throw new Exception("patient_id is required");
-    }
+$res = $stmt->get_result();
+$out = [];
 
-    // 2. Query DB
-    $sql = "SELECT
-                medication_name,
-                dose,
-                route,
-                frequency_number,
-                frequency_text,
-                time_period_weeks,
-                created_at
-            FROM treatments
-            WHERE patient_id = ?
-            ORDER BY created_at DESC, id DESC";
-
-    $stmt = $mysqli->prepare($sql);
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
-
-    $stmt->bind_param("s", $patient_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    $rows = [];
-    while ($row = $result->fetch_assoc()) {
-        $rows[] = [
-            "medication_name"   => $row["medication_name"],
-            "dose"              => $row["dose"],
-            "route"             => $row["route"],
-            "frequency_number"  => $row["frequency_number"],
-            "frequency_text"    => $row["frequency_text"],
-            "time_period_weeks" => $row["time_period_weeks"],
-            "created_at"        => $row["created_at"]
-        ];
-    }
-
-    $stmt->close();
-
-    $response["success"]    = true;
-    $response["treatments"] = $rows;
-
-} catch (Exception $e) {
-    $response["success"] = false;
-    $response["message"] = $e->getMessage();
+while ($row = $res->fetch_assoc()) {
+    $out[] = $row;
 }
 
-echo json_encode($response);
-exit;
+echo json_encode(["treatments" => $out]);

@@ -1,60 +1,58 @@
 <?php
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST");
+header("Access-Control-Allow-Headers: Content-Type");
 
 require_once "db_config.php";
 
-$response = [
-    "success" => false,
-    "message" => ""
-];
+$response = ["success" => false, "message" => ""];
 
 try {
-    // 1. Read raw JSON body
-    $raw = file_get_contents("php://input");
-    if (!$raw) {
-        throw new Exception("No JSON body received");
-    }
-
-    $data = json_decode($raw, true);
+    $data = json_decode(file_get_contents("php://input"), true);
     if (!is_array($data)) {
-        throw new Exception("Invalid JSON format");
+        throw new Exception("Invalid JSON");
     }
 
-    // 2. Extract fields
-    $patient_id = isset($data['patient_id']) ? trim($data['patient_id']) : '';
-    $name       = isset($data['name'])       ? trim($data['name'])       : '';
-    $dose       = isset($data['dose'])       ? trim($data['dose'])       : '-';
-    $period     = isset($data['period'])     ? trim($data['period'])     : '-';
+    $patient_id = strtolower(trim($data["patient_id"] ?? ""));
+    $name   = trim($data["name"] ?? "");
+    $dose   = trim($data["dose"] ?? "-");
+    $period = trim($data["period"] ?? "-");
 
-    if ($patient_id === '' || $name === '') {
+    if ($patient_id === "" || $name === "") {
         throw new Exception("patient_id and name are required");
     }
 
-    // 3. Insert into DB
+    if (!preg_match("/^pat_\d{4}$/", $patient_id)) {
+        throw new Exception("Invalid patient_id format");
+    }
+
     $stmt = $mysqli->prepare(
         "INSERT INTO medications (patient_id, name, dose, period)
          VALUES (?, ?, ?, ?)"
     );
 
     if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
+        throw new Exception($mysqli->error);
     }
 
     $stmt->bind_param("ssss", $patient_id, $name, $dose, $period);
 
     if (!$stmt->execute()) {
-        $stmt->close();
-        throw new Exception("Insert failed: " . $stmt->error);
+        throw new Exception($stmt->error);
     }
 
-    $response["success"] = true;
-    $response["message"] = "Medication added successfully";
+    if ($stmt->affected_rows !== 1) {
+        throw new Exception("Insert failed");
+    }
 
     $stmt->close();
 
+    $response["success"] = true;
+    $response["message"] = "Inserted";
+
 } catch (Exception $e) {
-    $response["success"] = false;
+    http_response_code(400);
     $response["message"] = $e->getMessage();
 }
 

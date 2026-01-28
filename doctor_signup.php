@@ -11,7 +11,6 @@ $response = [
 ];
 
 try {
-    // Read JSON input
     $input = file_get_contents("php://input");
     if (!$input) {
         throw new Exception("No JSON received");
@@ -22,7 +21,6 @@ try {
         throw new Exception("Invalid JSON format");
     }
 
-    // Extract values
     $doctor_id      = trim($data["doctor_id"] ?? "");
     $full_name      = trim($data["full_name"] ?? "");
     $email          = trim($data["email"] ?? "");
@@ -30,34 +28,50 @@ try {
     $specialization = trim($data["specialization"] ?? "");
     $password       = trim($data["password"] ?? "");
 
-    // Validate fields
-    if ($doctor_id === "" || $full_name === "" || $email === "" ||
-        $phone === "" || $specialization === "" || $password === "") 
-    {
+    // 🔹 EMPTY CHECK
+    if (
+        $doctor_id === "" || $full_name === "" || $email === "" ||
+        $phone === "" || $specialization === "" || $password === ""
+    ) {
         throw new Exception("All fields are required");
     }
 
+    // 🔹 Doctor ID validation
     if (!preg_match("/^doc_\\d{4}$/i", $doctor_id)) {
         throw new Exception("Doctor ID must be like doc_1001");
     }
 
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        throw new Exception("Invalid email format");
+    // 🔹 Name validation (ONLY letters and spaces)
+    if (!preg_match("/^[A-Za-z ]+$/", $full_name)) {
+        throw new Exception("Name should contain only letters and spaces");
     }
 
-    if (!preg_match("/^\\d+$/", $phone)) {
-        throw new Exception("Phone must contain digits only");
+    // 🔹 Email validation (letters + numbers + @gmail.com)
+    if (!preg_match("/^[A-Za-z][A-Za-z0-9]*@gmail\\.com$/", $email)) {
+        throw new Exception("Email must be in format abc123@gmail.com");
     }
 
-    if (strlen($phone) < 10) {
-        throw new Exception("Phone must be at least 10 digits");
+    // 🔹 Phone validation (exactly 10 digits)
+    if (!preg_match("/^\\d{10}$/", $phone)) {
+        throw new Exception("Phone number must be exactly 10 digits");
     }
 
-    if (strlen($password) < 6) {
-        throw new Exception("Password must be at least 6 characters");
+    // 🔹 Phone validation (not all digits same)
+    if (preg_match("/(\\d)\\1{9}/", $phone)) {
+        throw new Exception("Phone number cannot have all digits same");
     }
 
-    // Check existing
+    // 🔹 Password validation (same as Android)
+    if (!preg_match(
+        "/^(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-={}\\[\\]:;\"'<>,.?\\/])[A-Za-z\\d!@#$%^&*()_+\\-={}\\[\\]:;\"'<>,.?\\/]{6,10}$/",
+        $password
+    )) {
+        throw new Exception(
+            "Password must be 6–10 chars with 1 capital letter, 1 digit and 1 special character"
+        );
+    }
+
+    // 🔹 Duplicate check
     $check = $mysqli->prepare(
         "SELECT id FROM doctors WHERE doctor_id = ? OR email = ? LIMIT 1"
     );
@@ -70,13 +84,15 @@ try {
     }
     $check->close();
 
-    // Insert
+    // 🔹 Insert
     $insert = $mysqli->prepare(
-        "INSERT INTO doctors (doctor_id, full_name, email, phone, specialization, password)
-         VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO doctors 
+        (doctor_id, full_name, email, phone, specialization, password)
+        VALUES (?, ?, ?, ?, ?, ?)"
     );
 
-    $insert->bind_param("ssssss",
+    $insert->bind_param(
+        "ssssss",
         $doctor_id,
         $full_name,
         $email,
@@ -91,8 +107,8 @@ try {
 
     $insert->close();
 
-    $response["success"] = true;
-    $response["message"] = "Registration successful";
+    $response["success"]   = true;
+    $response["message"]   = "Registration successful";
     $response["doctor_id"] = $doctor_id;
 
 } catch (Exception $e) {

@@ -1,10 +1,8 @@
 <?php
-// Start buffering so that ANY accidental output (warnings, spaces, etc.)
-// can be cleared before we send our JSON.
 ob_start();
 
 error_reporting(E_ALL);
-ini_set('display_errors', '0'); // do not print PHP warnings to the client
+ini_set('display_errors', '0');
 
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Origin: *");
@@ -12,17 +10,16 @@ header("Access-Control-Allow-Origin: *");
 require_once "db_config.php";
 
 $response = [
-    "success"        => false,
-    "message"        => "",
-    "doctor_id"      => "",
-    "full_name"      => "",
-    "email"          => "",
-    "phone"          => "",
-    "specialization" => ""
+    "success"         => false,
+    "message"         => "",
+    "doctor_id"       => "",
+    "full_name"       => "",
+    "email"           => "",
+    "phone"           => "",
+    "specialization"  => ""
 ];
 
 try {
-    // Read JSON body
     $input = file_get_contents("php://input");
     if ($input === false || $input === "") {
         throw new Exception("No JSON received");
@@ -34,18 +31,16 @@ try {
     }
 
     $doctor_id = trim($data["doctor_id"] ?? "");
-    $password  = trim($data["password"]  ?? "");
+    $password  = trim($data["password"] ?? "");
 
     if ($doctor_id === "" || $password === "") {
         throw new Exception("Doctor ID and Password are required");
     }
 
-    // Validate doctor_id pattern: doc_1234
     if (!preg_match('/^doc_\d{4}$/i', $doctor_id)) {
         throw new Exception("Invalid Doctor ID format");
     }
 
-    // Check credentials
     $stmt = $mysqli->prepare(
         "SELECT doctor_id, full_name, email, phone, specialization, password
          FROM doctors
@@ -65,17 +60,34 @@ try {
         throw new Exception("Doctor not found");
     }
 
-    $stmt->bind_result($db_id, $db_name, $db_email, $db_phone, $db_spec, $db_pass);
+    $stmt->bind_result(
+        $db_id,
+        $db_name,
+        $db_email,
+        $db_phone,
+        $db_spec,
+        $db_pass
+    );
     $stmt->fetch();
+    $stmt->close();
 
-    // Adjust this check if you later use password_hash()
-    if ($password !== $db_pass) {
+    // ✅ PASSWORD CHECK: SUPPORTS BOTH PLAIN & HASHED
+    $loginOk = false;
+
+    // Case 1: plain text password
+    if ($password === $db_pass) {
+        $loginOk = true;
+    }
+
+    // Case 2: hashed password (from forgot password)
+    if (!$loginOk && password_verify($password, $db_pass)) {
+        $loginOk = true;
+    }
+
+    if (!$loginOk) {
         throw new Exception("Incorrect password");
     }
 
-    $stmt->close();
-
-    // Success response
     $response["success"]        = true;
     $response["message"]        = "Login successful";
     $response["doctor_id"]      = $db_id;
@@ -89,7 +101,7 @@ try {
     $response["message"] = $e->getMessage();
 }
 
-// Remove any previous output (warnings, spaces, etc.) and send clean JSON
 ob_clean();
 echo json_encode($response);
 exit;
+?>
